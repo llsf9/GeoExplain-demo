@@ -129,6 +129,8 @@ def calLoss2(perturbated_input, mask, batchId, model, ground_value, y_lat, y_lng
     ## 归一化
     prob_sta = (pre_value_prob - torch.mean(pre_prob).item()) /  torch.sqrt(torch.var(pre_prob)).item() /4000
     
+    err = get_distance(pre_lat.item(),pre_lng.item(), y_lat, y_lng)
+
     sizeloss = l1_coeff*torch.mean(torch.abs(1 - mask)) ## 计算blur面积，量级 [0~1]*l1
     normloss = tv_coeff*tv_norm(mask, tv_beta) 
     classifyloss = prob_sta
@@ -142,4 +144,4 @@ def calLoss2(perturbated_input, mask, batchId, model, ground_value, y_lat, y_lng
     #     print(f'sumloss: {sumloss} sizeloss: {sizeloss} normloss: {normloss} classifyloss: {classifyloss} err: {err} classifyloss: {classifyloss}')
     #     return sumloss, pre_prob, pre_prob
 
-    return sumloss,  pre_lat, pre_lng
+    return sumloss,  pre_lat, pre_lng, err

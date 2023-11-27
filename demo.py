@@ -12,12 +12,16 @@ def load_model(checkpoint, hparams) :
     model = loadModel(checkpoint, hparams)
     return model
 
-def train_mask(filename, img_array) :
+@st.cache_data
+def load_img(uploaded_file) :
+    image = Image.open(uploaded_file)
+    return image 
+
+
+def train_mask(filename, img_array, iter, lr, size) :
 
     tv_beta = 3
-    lr = 1e-1
-    iter = 200
-    l1_coeff = 0.01
+    l1_coeff = size
     tv_coeff = 0.3
     batch_size=64
     num_workers=4
@@ -43,10 +47,10 @@ def train_mask(filename, img_array) :
     upsample = torch.nn.UpsamplingBilinear2d(size=(256, 256)).cuda()
     optimizer = torch.optim.Adam([mask], lr=lr)
     
-    'Generating...'
+    st.sidebar.text('Generating...')
 
-    latest_iteration = st.empty()
-    bar = st.progress(0)
+    latest_iteration = st.sidebar.empty()
+    bar = st.sidebar.progress(0)
     progress = 1
 
     for i in range(1, iter+1):
@@ -62,7 +66,7 @@ def train_mask(filename, img_array) :
         noise = generateNoise()
         perturbated_input = perturbated_input + noise
 
-        loss, pre_lat, pre_lng = calLoss2(perturbated_input, mask, i, model, ground_value, y_lat, y_lng, tv_beta, l1_coeff, tv_coeff, printLog=False) 
+        loss, pre_lat, pre_lng, err = calLoss2(perturbated_input, mask, i, model, ground_value, y_lat, y_lng, tv_beta, l1_coeff, tv_coeff, printLog=False) 
 
 
         # 更新   
@@ -73,7 +77,7 @@ def train_mask(filename, img_array) :
 
     vis_result, floatImg, sharpMask, heatmap = resultVis("", mask, mixBlur, intImg, floatImg, upsample, "", str(i), False)
 
-    return y_lat, y_lng, pre_lat.item(), pre_lng.item(), vis_result, heatmap
+    return y_lat, y_lng, pre_lat.item(), pre_lng.item(), err, vis_result, heatmap
 
 
 ## Main
@@ -81,57 +85,67 @@ st.title('Explain GeoEstimation')
 
 # parameters
 groudValuePath = "../resources/im2gps_places365.csv"
-checkpoint="base_M/epoch=014-val_loss=18.4833.ckpt"
+checkpoint="../models/base_M/epoch=014-val_loss=18.4833.ckpt"
 hparams="base_M/hparams.yaml"
 
-# Add a slider to the sidebar:
-iterations = st.sidebar.slider('iterations', 1000, 5000, 1000, 1000)  # 👈 this is a widget
-lr = st.sidebar.slider('lr', 1000, 5000, 1000, 1000)  # 👈 this is a widget
-size = st.sidebar.slider('size', 1000, 5000, 1000, 1000)
+# sidebar:
+# upload images
+st.sidebar.text("Loading model...")
+model = load_model(checkpoint, hparams)
+st.sidebar.text("Done!")
+uploaded_file = st.sidebar.file_uploader("Choose a image")
 
+# hyperparameter adjusting
+# iterations, lr, size = parameter_adust()
+iterations = st.sidebar.slider('iterations', 1000, 5000, 1000, 1000)
+lr = st.sidebar.select_slider("lr", options=[0.0001, 0.001, 0.005, 0.01, 0.1], value = 0.1)
+size = st.sidebar.select_slider("size", options=[0.005, 0.01, 0.05, 0.1, 0.5], value = 0.01)
 
-left_column, right_column = st.columns(2)
+parameters = {"iter":iterations, "lr":lr, "size":size}
 
-with left_column:
-    st.write("Loading model")
-    model = load_model(checkpoint, hparams)
-    st.write("Done!")
-    uploaded_file = st.file_uploader("Choose a file")
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file)
-        img_array = np.array(image)
-        st.image(
-            image, caption='original images',
+if uploaded_file is not None:
+    image = load_img(uploaded_file)
+    img_array = np.array(image)
+    st.sidebar.image(
+        image, caption='original image',
+        # use_column_width=True
+    )
+    generation_button = st.sidebar.button('Mask Generation')
+    # im_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+    # intImg = cv2.resize(im_bgr, (256, 256))
+    # floatImg = np.float32(intImg) / 255
+
+    # varImg = preprocess_image(floatImg)
+    # re_lat, re_lng, prob = gps_inference(varImg, model)
+    # "re_lat", re_lat
+    # "re_lng", re_lng
+
+    left_column, right_column = st.columns(2)
+
+    if generation_button:
+        y_lat, y_lng, pre_lat, pre_lng, err, vis_result, heatmap = train_mask(uploaded_file.name, img_array, parameters["iter"], parameters["lr"], parameters["size"])
+        left_column.image(
+            image = cv2.cvtColor(np.uint8(255*vis_result), cv2.COLOR_BGR2RGB),          
+            caption='masked image',
             use_column_width=True
         )
-        # im_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-        # intImg = cv2.resize(im_bgr, (256, 256))
-        # floatImg = np.float32(intImg) / 255
-
-        # varImg = preprocess_image(floatImg)
-        # re_lat, re_lng, prob = gps_inference(varImg, model)
-        # "re_lat", re_lat
-        # "re_lng", re_lng
-
-if right_column.button('Mask Generation'):
-    with right_column:
-          y_lat, y_lng, pre_lat, pre_lng, vis_result, heatmap = train_mask(uploaded_file.name, img_array)
-          "Generation Done!"
-          st.image(
-            image = [cv2.cvtColor(np.uint8(255*vis_result), cv2.COLOR_BGR2RGB), 
-                     cv2.cvtColor(np.uint8(255*heatmap), cv2.COLOR_BGR2RGB)],
-            caption=['masked image',"heatmap image"],
-            width = 250
+        right_column.image(
+            image = cv2.cvtColor(np.uint8(255*heatmap), cv2.COLOR_BGR2RGB),
+            caption="heatmap image",
+            use_column_width=True
         )
 
-    df = pd.DataFrame({
-        "col1": [y_lat, pre_lat],
-        "col2": [y_lng, pre_lng],
-        "col3": ["#55ff00","#ff0000"],
-    })
+        df = pd.DataFrame({
+            "col1": [y_lat, pre_lat],
+            "col2": [y_lng, pre_lng],
+            "col3": ["#55ff00","#ff0000"],
+        })
 
-    st.map(df,
-        latitude='col1',
-        longitude='col2',
-        color='col3',
-        zoom = 1)
+        left_column.map(df,
+            latitude='col1',
+            longitude='col2',
+            color='col3',
+            zoom = 1)
+        
+        with right_column :
+            st.write("error distance:",err)
