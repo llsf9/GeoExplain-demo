@@ -1,6 +1,6 @@
 # GeoExplain-demo
 A tool based on interpretable AI to blur specify region of image for person privacy.
-![][cover.img]
+![](cover.png)
 
 ## Features
 - quick start
