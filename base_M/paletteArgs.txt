@@ -1,0 +1,35 @@
+{"init_type": "kaiming", 
+"module_name": "guided_diffusion", 
+"unet": {
+    "in_channel": 6,
+    "out_channel": 3,
+    "inner_channel": 64,
+    "channel_mults": [
+        1,
+        2,
+        4,
+        8
+    ],
+    "attn_res": [
+        16
+    ],
+    "num_head_channels": 32,
+    "res_blocks": 2,
+    "dropout": 0.2,
+    "image_size": 256
+},
+"beta_schedule": {
+    "train": {
+        "schedule": "linear",
+        "n_timestep": 2000,
+        "linear_start": 1e-6,
+        "linear_end": 0.01
+    },
+    "test": {
+        "schedule": "linear",
+        "n_timestep": 2000,
+        "linear_start": 1e-4,
+        "linear_end": 0.09
+    }
+}
+}
