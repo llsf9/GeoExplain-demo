@@ -21,6 +21,8 @@ from classification.dataset import MsgPackIterableDatasetMultiTargetWithDynLabel
 class MultiPartitioningClassifier(pl.LightningModule):
     def __init__(self, hparams: Namespace):
         super().__init__()
+
+        ## 导入外部的hyperameter
         self.hparams = hparams
 
         self.partitionings, self.hierarchy = self.__init_partitionings()
@@ -44,8 +46,12 @@ class MultiPartitioningClassifier(pl.LightningModule):
         logging.info("Build model")
         model, nfeatures = utils_global.build_base_model(self.hparams.arch)
 
+
+        ## ModuleList就是list的一个变形，使用方法相同
+        ## 所以这里相当与为三个分层分类，各训练一个单独的分类器
         classifier = torch.nn.ModuleList(
             [
+                ##  torch.nn.Linear(inputNum, outputNum)
                 torch.nn.Linear(nfeatures, len(self.partitionings[i]))
                 for i in range(len(self.partitionings))
             ]
@@ -60,6 +66,7 @@ class MultiPartitioningClassifier(pl.LightningModule):
         return model, classifier
 
     def forward(self, x):
+        # fv = feature vectors
         fv = self.model(x)
         yhats = [self.classifier[i](fv) for i in range(len(self.partitionings))]
         return yhats
@@ -255,7 +262,7 @@ class MultiPartitioningClassifier(pl.LightningModule):
             pred_lng_dict[pname] = pred_lngs
             pred_class_dict[pname] = pred_classes
         ## 有改动！！
-        return meta_batch["img_path"], pred_class_dict, pred_lat_dict, pred_lng_dict, hierarchy_preds
+        return meta_batch["img_path"], pred_class_dict, pred_lat_dict, pred_lng_dict, hierarchy_preds, yhats
 
     def test_step(self, batch, batch_idx, dataloader_idx=None):
 

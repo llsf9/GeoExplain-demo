@@ -23,6 +23,7 @@ def check_is_valid_torchvision_architecture(architecture: str):
 
 def build_base_model(arch: str):
 
+    ## 使用dict形式提取model，或者用torchvision.model.resnet50的方式也是可以的
     model = torchvision.models.__dict__[arch](pretrained=True)
 
     # get input dimension before classification layer
@@ -34,6 +35,7 @@ def build_base_model(arch: str):
         model = torch.nn.Sequential(*list(model.children())[:-1])
     elif "resne" in arch:
         # usually all ResNet variants
+        # 去掉了最后的pooling和fc层，只使用前面的特征提取层
         nfeatures = model.fc.in_features
         model = torch.nn.Sequential(*list(model.children())[:-2])
     else:

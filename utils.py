@@ -11,11 +11,11 @@ from math import ceil
 import pandas as pd
 from tqdm.auto import tqdm
 import pytorch_lightning as pl
-from PIL import Image
 import random
 from math import radians, cos, sin, asin, sqrt
 import os
 import csv
+from PIL.ExifTags import TAGS
 
 def torch_fix_seed(seed=42): 
     torch.manual_seed(seed)
@@ -64,4 +64,35 @@ def addJpgImgFile(dirPath, skipListPath):
     print(f"Processed data num : {len(newImgList)}")
     
     return newImgList 
-        
+
+def gpsConvert(gps:tuple):
+    """
+    分角为单位的Gps信息改成小数点形式
+    input: []
+    return : .
+    """
+    gps_point = float(gps[0]+gps[1]/60+gps[2]/3600)
+
+    return gps_point
+
+def getExifInfo(im):
+    """
+    input: Imageでopenした画像情報
+    return: GPS
+    """
+    exif = im._getexif()
+
+    exif_table = {}
+    for tag_id, value in exif.items():
+        tag = TAGS.get(tag_id, tag_id)
+        exif_table[tag] = value
+
+    lat = exif_table["GPSInfo"][2]
+    lng = exif_table["GPSInfo"][4]
+
+    lat = gpsConvert(lat)
+    lng = gpsConvert(lng)
+
+    return lat, lng
+
+    

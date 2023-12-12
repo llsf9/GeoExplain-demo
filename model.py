@@ -34,9 +34,9 @@ def gps_inference(img, model):
 
     if torch.cuda.is_available():
         data[0] = data[0].cuda()
-    img_paths, pred_classes, pred_latitudes, pred_longitudes, hierarchy_preds = model.inference(data)
+    _, pred_classes, pred_latitudes, pred_longitudes, hierarchy_preds, yhats= model.inference(data)
     
-    return pred_latitudes['hierarchy'], pred_longitudes['hierarchy'], hierarchy_preds
+    return pred_classes['hierarchy'], pred_latitudes['hierarchy'], pred_longitudes['hierarchy'], hierarchy_preds, yhats
 
 def loadModel(checkpoint, hparams):
     '''
@@ -82,7 +82,7 @@ def upSample(upsample, mask) :
     return upsampled_mask
 
 def generateNoise() :
-    cv2.setRNGSeed(1024)
+    # cv2.setRNGSeed(1024)
     noise = np.zeros((256, 256, 3), dtype = np.float32)
     cv2.randn(noise, 0, 0.2)
     noise = numpy_to_torch(noise)
@@ -127,8 +127,9 @@ def calLoss2(perturbated_input, mask, batchId, model, ground_value, y_lat, y_lng
     pre_value_prob = pre_prob[0,ground_value]
     
     ## 归一化
-    prob_sta = (pre_value_prob - torch.mean(pre_prob).item()) /  torch.sqrt(torch.var(pre_prob)).item() /4000
-    
+    prob_sta = torch.abs(((pre_value_prob - torch.mean(pre_prob).item()) /  torch.sqrt(torch.var(pre_prob)).item() ) * 0.1)
+    # prob_sta = pre_value_prob
+
     err = get_distance(pre_lat.item(),pre_lng.item(), y_lat, y_lng)
 
     sizeloss = l1_coeff*torch.mean(torch.abs(1 - mask)) ## 计算blur面积，量级 [0~1]*l1
@@ -144,4 +145,32 @@ def calLoss2(perturbated_input, mask, batchId, model, ground_value, y_lat, y_lng
     #     print(f'sumloss: {sumloss} sizeloss: {sizeloss} normloss: {normloss} classifyloss: {classifyloss} err: {err} classifyloss: {classifyloss}')
     #     return sumloss, pre_prob, pre_prob
 
-    return sumloss,  pre_lat, pre_lng, err
+    return sumloss, sizeloss, normloss, classifyloss, pre_lat, pre_lng, err
+
+
+def calLossWithCoarse(perturbated_input, mask, batchId, model, pre_class, y_lat, y_lng, tv_beta, l1_coeff, tv_coeff, printLog = False, debug = False) :
+    '''
+    Calculation the loss function with no Softmax
+    '''
+    ##计算loss
+    _, pre_lat ,pre_lng, preds, yhats = gps_inference(perturbated_input, model)
+
+    yhat0_id = model.hierarchy.M[:,0][pre_class]
+    pred = preds[0,pre_class]
+
+    err = get_distance(pre_lat.item(),pre_lng.item(), y_lat, y_lng)
+
+    sizeloss = l1_coeff*torch.mean(torch.abs(1 - mask)) ## 计算blur面积，量级 [0~1]*l1
+    normloss = tv_coeff*tv_norm(mask, tv_beta) 
+    classifyloss = yhats[0][0,yhat0_id]*0.5
+
+    sumloss = sizeloss + normloss + classifyloss
+    
+    if (printLog and batchId % 100 == 0) or debug:
+        print(f'sumloss: {sumloss} sizeloss: {sizeloss} normloss: {normloss} classifyloss: {classifyloss} err: {err} classifyloss: {classifyloss}')
+    
+    # if debug :
+    #     print(f'sumloss: {sumloss} sizeloss: {sizeloss} normloss: {normloss} classifyloss: {classifyloss} err: {err} classifyloss: {classifyloss}')
+    #     return sumloss, pre_prob, pre_prob
+
+    return sumloss, sizeloss, normloss, classifyloss,pred, pre_lat, pre_lng, err
