@@ -1,3 +1,4 @@
 __pycache__/
 classification/__pycache__/
 *.ipynb
+output/*

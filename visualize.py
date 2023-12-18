@@ -45,7 +45,7 @@ def resultVis(resPath, mask, mixBlur, intImg, floatImg, upsample, img_path, epoc
         cv2.imwrite(resPath+"/sharpMask/"+img_path, np.uint8(255*sharpMask))
         cv2.imwrite(resPath+"/heatmap/"+img_path, np.uint8(255*heatmap))
        
-    return vis_result, floatImg, sharpMask, heatmap
+    return vis_result, floatImg, sharpMask, heatmap, cam
 
 def visSharpMask(vis_mask) :
     sharpMask = copy.deepcopy(vis_mask)

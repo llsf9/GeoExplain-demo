@@ -13,6 +13,8 @@ from ImgProcess import *
 from model import * 
 from visualize import *
 from torchvision import transforms
+import random
+import cv2
 
 
 # Palette
@@ -42,6 +44,36 @@ def load_edit_model(args, model_pth) :
 def load_img(uploaded_file) :
     image = Image.open(uploaded_file)
     return image  
+
+def random_choose(datasetName) :
+
+    if datasetName == "im2gps" :
+        file_path = "/home/aiwen/GeoExplain/resources/images/im2gps"
+        skipListPath = []
+
+    # path list
+    img_paths = addJpgImgFile(file_path, skipListPath)
+    img_paths = [os.path.join(file_path, path) for path in img_paths]
+
+    # random path
+    # if "random_img" not in st.session_state :
+    #     st.session_state["random_img"] = random.randint(0,len(img_paths))
+    img_path = img_paths[random.randint(0,len(img_paths))]
+
+    return img_path
+
+def getGPS(image, isDatasetImage) :
+    if isDatasetImage is None :
+        lat, lng = getExifInfo(image)
+        return lat, lng
+    else :
+        if isDatasetImage == "im2gps" :
+            groudValuePath = "../resources/im2gps_places365.csv"
+            col1 = 2 
+            col2 = 3
+            lat, lng = getGV(groudValuePath, st.session_state["img_path"].split("/")[-1], col1, col2)
+
+    return lat, lng
 
 def load_base_img(image):
     tfs = transforms.Compose([
@@ -83,7 +115,7 @@ def inpainting(img, mask, model):
 
 
 
-def train_mask(filename, img_array, iter, lr, size, norm, y_lat=None, y_lng=None) :
+def train_mask(img_array, iter, lr, size, norm, y_lat, y_lng) :
 
     tv_beta = 3
     l1_coeff = size
@@ -100,11 +132,6 @@ def train_mask(filename, img_array, iter, lr, size, norm, y_lat=None, y_lng=None
     varBlur = preprocess_image(medianBlur)
 
     mask = initMask()# 生成mask
-
-    # 获取真值
-    # if its im2gps or random2k
-    if isDatasetImage:
-        y_lat, y_lng = getGV(groudValuePath, filename, 2, 3)
 
     if y_lat is not None:
         pre_class, pre_lat ,pre_lng, preds, _ = gps_inference(varImg, model) ## 12893个分类
@@ -164,12 +191,12 @@ def train_mask(filename, img_array, iter, lr, size, norm, y_lat=None, y_lng=None
         "classifyloss":classifyLossList,
         "pred":predList
     }
-    vis_result, floatImg, sharpMask, heatmap = resultVis("", mask, mixBlur, intImg, floatImg, upsample, "", str(i), False)
+    vis_result, floatImg, sharpMask, heatmap, cam = resultVis("", mask, mixBlur, intImg, floatImg, upsample, "", str(i), False)
 
-    return y_lat, y_lng, pre_lat.item(), pre_lng.item(), err, lossDict, vis_result, sharpMask, heatmap
+    return pre_lat.item(), pre_lng.item(), err, lossDict, vis_result, sharpMask, heatmap, cam
 
 
-## Main
+####################################### Main ############################################### 
 st.title('Explain GeoEstimation')
 
 # parameters
@@ -179,14 +206,26 @@ hparams="base_M/hparams.yaml"
 
 # sidebar:
 # upload images
-isDatasetImage = st.sidebar.checkbox('im2gps image')
-uploaded_file = st.sidebar.file_uploader("Choose a image")
+isDatasetImage = None
+uploaded_file = st.sidebar.file_uploader("Upload a image or random choose from Im2Gps datasets")
+random_button = st.sidebar.button('random choose')
+
+datasetName = "im2gps" ## TODO
+if random_button and "img_path" not in st.session_state:
+    st.session_state["img_path"] = random_choose(datasetName)
+# if random_button or st.session_state.get("random_button", False):
+#     uploaded_file = random_choose(datasetName)
+#     isDatasetImage = datasetName
+#     if "random_button" not in st.session_state :
+#         st.session_state["random_button"] = True
+if "img_path" in st.session_state:
+    uploaded_file = st.session_state["img_path"]
 
 # hyperparameter adjusting
 # iterations, lr, size = parameter_adust()
 iterations = st.sidebar.slider('iterations', 500, 5000, 500, 1000)
 lr = st.sidebar.select_slider("lr", options=[0.0001, 0.001, 0.005, 0.01, 0.1], value = 0.1)
-size = st.sidebar.select_slider("size", options=[0.005, 0.01, 0.05, 0.1, 0.5], value = 0.01)
+size = st.sidebar.select_slider("size", options=[0.001, 0.003, 0.005, 0.01, 0.05, 0.1, 0.5], value = 0.01)
 norm = st.sidebar.select_slider("norm", options=[0.05, 0.1, 0.2, 0.4, 0.6], value = 0.2)
 
 
@@ -195,17 +234,18 @@ parameters = {"iter":iterations, "lr":lr, "size":size, "norm":norm}
 if uploaded_file is not None:
     image = load_img(uploaded_file)
 
-    lat, lng =None, None
-    if not isDatasetImage :
-        lat, lng = getExifInfo(image)
-        st.write("true lat:", lat)
-        st.write("true lng:", lng)
+    ## Original GPS info
+    y_lat, y_lng = getGPS(image, "im2gps")
+    st.write("true lat:", y_lat)
+    st.write("true lng:", y_lng)
 
     img_array = np.array(image)
+    # print(type(img_array))
     st.sidebar.image(
         image, caption='original image',
         # use_column_width=True
     )
+
     loss_button = st.sidebar.checkbox('loss plot')
     edit_check = st.sidebar.checkbox('edit check')
     generation_button = st.sidebar.button('Mask Generation')
@@ -218,7 +258,7 @@ if uploaded_file is not None:
         st.sidebar.text("Loading model...")
         model = load_model(checkpoint, hparams)
         st.sidebar.text("Done!")
-        y_lat, y_lng, pre_lat, pre_lng, err, lossDict, vis_result, sharpMask, heatmap = train_mask(uploaded_file.name, img_array, parameters["iter"], parameters["lr"], parameters["size"], parameters["norm"],lat, lng)
+        pre_lat, pre_lng, err, lossDict, vis_result, sharpMask, heatmap, cam = train_mask(img_array, parameters["iter"], parameters["lr"], parameters["size"], parameters["norm"],y_lat, y_lng)
         
         # palette model
         if edit_check :
@@ -245,8 +285,8 @@ if uploaded_file is not None:
             use_column_width=True
         )
         right_column.image(
-            image = cv2.cvtColor(np.uint8(255*heatmap), cv2.COLOR_BGR2RGB),
-            caption="heatmap image",
+            image = cv2.cvtColor(np.uint8(255*cam), cv2.COLOR_BGR2RGB),
+            caption="cam image",
             use_column_width=True
         )
 
@@ -284,3 +324,22 @@ if uploaded_file is not None:
             st.scatter_chart(np.array(lossDict["classifyloss"]))
             st.scatter_chart(np.array(lossDict["pred"]))
 
+        # 保存图片
+        save_list = [np.uint8(255*vis_result),
+                    np.uint8(255*heatmap),
+                    np.uint8(255*cam),
+                    np.uint8(255*sharpMask),
+                    editedImg,
+                    condImg]
+
+        if "img_path" not in st.session_state : 
+            dir_list = ["vis_result", "heatmap", "cam", "sharp_mask"]
+        else : 
+            dir_list = ["vis_result", "heatmap", "cam", "sharp_mask", "edit_img", "cond_img"]
+            
+        i = 0 
+        while os.path.exists("output/vis_result/%03i.jpg" % i) :
+            i += 1
+        filename = "%03i.jpg" % i
+        for img, dirname in zip(save_list, dir_list) :
+            cv2.imwrite(os.path.join("output", dirname, filename), img)
