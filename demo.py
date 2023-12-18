@@ -88,7 +88,6 @@ def load_base_img(image):
 
     return image
 
-
 def inpainting(img, mask, model):
 
     mask = torch.from_numpy(mask).permute(2, 0, 1)
@@ -112,8 +111,6 @@ def inpainting(img, mask, model):
     resImg = tensor2img(output_img)
 
     return resImg, cond_image_np
-
-
 
 def train_mask(img_array, iter, lr, size, norm, y_lat, y_lng) :
 
@@ -276,8 +273,12 @@ if uploaded_file is not None:
             baseImg = load_base_img(image)
 
             # inference
-            editedImg, condImg = inpainting(baseImg, sharpMask, edit_model)        
-        
+            editNum = 2 
+            editedImgList = []
+            for num in range(editNum) :
+                editedImg, condImg = inpainting(baseImg, sharpMask, edit_model)
+                editedImgList.append(editedImg)
+
         # result 
         left_column.image(
             image = cv2.cvtColor(np.uint8(255*vis_result), cv2.COLOR_BGR2RGB),          
@@ -292,13 +293,13 @@ if uploaded_file is not None:
 
         if edit_check :
             left_column.image(
-                image = editedImg,          
-                caption='edited image',
+                image = editedImgList[0],          
+                caption='edited image 1',
                 use_column_width=True
             )
             right_column.image(
-                image = condImg,
-                caption="condition image",
+                image = editedImgList[1],
+                caption='edited image 2',
                 use_column_width=True
             )
 
@@ -329,17 +330,24 @@ if uploaded_file is not None:
                     np.uint8(255*heatmap),
                     np.uint8(255*cam),
                     np.uint8(255*sharpMask),
-                    editedImg,
+                    editedImgList,
                     condImg]
 
         if "img_path" not in st.session_state : 
             dir_list = ["vis_result", "heatmap", "cam", "sharp_mask"]
         else : 
             dir_list = ["vis_result", "heatmap", "cam", "sharp_mask", "edit_img", "cond_img"]
-            
+
         i = 0 
         while os.path.exists("output/vis_result/%03i.jpg" % i) :
             i += 1
         filename = "%03i.jpg" % i
-        for img, dirname in zip(save_list, dir_list) :
-            cv2.imwrite(os.path.join("output", dirname, filename), img)
+
+        for con, dirname in zip(save_list, dir_list) :
+
+            if dirname == "edit_img" :
+                for j, img in enumerate(con) :
+                    filename = "%03i" % i + "-%i" % j + ".jpg"
+                    cv2.imwrite(os.path.join("output", dirname, filename), img)
+
+            cv2.imwrite(os.path.join("output", dirname, filename), con)

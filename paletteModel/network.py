@@ -23,7 +23,7 @@ class Network(BaseNetwork):
         to_torch = partial(torch.tensor, dtype=torch.float32, device=device)
         betas = make_beta_schedule(**self.beta_schedule[phase])
         betas = betas.detach().cpu().numpy() if isinstance(
-            betas, torch.Tensor) else betas
+            betas, torch.Tensor) else betas 
         alphas = 1. - betas
 
         timesteps, = betas.shape
