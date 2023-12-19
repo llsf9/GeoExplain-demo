@@ -1,4 +1,7 @@
 __pycache__/
 classification/__pycache__/
 *.ipynb
-output/*
+output/
+input/*
+eval_output*
+maskEval.py

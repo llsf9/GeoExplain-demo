@@ -14,7 +14,13 @@ def resultVis(resPath, mask, mixBlur, intImg, floatImg, upsample, img_path, epoc
     vis_mask = vis_mask.cpu().data.numpy()[0]
     vis_mask = np.transpose(vis_mask, (1, 2, 0))
     vis_mask = (vis_mask - np.min(vis_mask)) / np.max(vis_mask)
-    vis_mask = 1 - vis_mask
+
+    failFlag = False
+    if np.all(vis_mask<0.6):
+        vis_mask = np.full((256,256,1), 0.)
+        failFlag = True
+    else:
+        vis_mask = 1 - vis_mask
     
     heatmap = cv2.applyColorMap(np.uint8(255*vis_mask), cv2.COLORMAP_JET)
     heatmap = np.float32(heatmap) / 255
@@ -45,7 +51,7 @@ def resultVis(resPath, mask, mixBlur, intImg, floatImg, upsample, img_path, epoc
         cv2.imwrite(resPath+"/sharpMask/"+img_path, np.uint8(255*sharpMask))
         cv2.imwrite(resPath+"/heatmap/"+img_path, np.uint8(255*heatmap))
        
-    return vis_result, floatImg, sharpMask, heatmap, cam
+    return vis_result, floatImg, sharpMask, heatmap, cam, failFlag
 
 def visSharpMask(vis_mask) :
     sharpMask = copy.deepcopy(vis_mask)

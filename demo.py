@@ -72,6 +72,9 @@ def random_choose(datasetName) :
     #     st.session_state["random_img"] = random.randint(0,len(img_paths))
     img_path = img_paths[random.randint(0,len(img_paths))]
 
+    #debug 
+    img_path = "/home/aiwen/GeoExplain/resources/images/im2gps/Chicago_00080_496345089_f5d47dea91_196_69212252@N00.jpg"
+    
     return img_path
 
 def getGPS(image, isDatasetImage) :
@@ -144,11 +147,11 @@ def train_mask(img_array, iter, lr, size, norm, y_lat, y_lng) :
 
     if y_lat is not None:
         pre_class, pre_lat ,pre_lng, preds, _ = gps_inference(varImg, model) ## 12893个分类
-        err = get_distance(pre_lat ,pre_lng, y_lat, y_lng)
+        oriErr = get_distance(pre_lat ,pre_lng, y_lat, y_lng)
 
         st.sidebar.write("prelat:", pre_lat.item())
         st.sidebar.write("prelng:", pre_lng.item())
-        st.sidebar.write("error:", err)
+        st.sidebar.write("error:", oriErr)
 
         pre_class = pre_class.item()
         ground_pred = preds[0,pre_class]
@@ -200,8 +203,9 @@ def train_mask(img_array, iter, lr, size, norm, y_lat, y_lng) :
         "classifyloss":classifyLossList,
         "pred":predList
     }
-    vis_result, floatImg, sharpMask, heatmap, cam = resultVis("", mask, mixBlur, intImg, floatImg, upsample, "", str(i), False)
+    vis_result, floatImg, sharpMask, heatmap, cam, failFlag = resultVis("", mask, mixBlur, intImg, floatImg, upsample, "", str(i), False)
 
+    if failFlag : err = oriErr
     return pre_lat.item(), pre_lng.item(), err, lossDict, vis_result, sharpMask, heatmap, cam
 
 def deletePath():
@@ -239,7 +243,8 @@ if "img_path" in st.session_state:
 # iterations, lr, size = parameter_adust()
 iterations = st.sidebar.slider('iterations', 500, 5000, 500, 1000)
 lr = st.sidebar.select_slider("lr", options=[0.0001, 0.001, 0.005, 0.01, 0.1], value = 0.1)
-size = st.sidebar.select_slider("size", options=[0.001, 0.003, 0.005, 0.01, 0.05, 0.1, 0.5], value = 0.01)
+# size = st.sidebar.select_slider("size", options=[0.001, 0.003, 0.005, 0.01, 0.05, 0.1, 0.5], value = 0.01)
+size = st.sidebar.number_input('Input size weight') # debug
 norm = st.sidebar.select_slider("norm", options=[0.05, 0.1, 0.2, 0.4, 0.6], value = 0.2)
 
 
@@ -324,6 +329,11 @@ if uploaded_file is not None:
                 use_column_width=True
             )
 
+            errList = []
+            for i, img in enumerate(outputList) :
+                _, pre_lat, pre_lng, _, _ = gps_inference(img, model) ## 12893个分类
+                errList.append( get_distance(pre_lat ,pre_lng, y_lat, y_lng) )
+
         df = pd.DataFrame({
             "col1": [y_lat, pre_lat],
             "col2": [y_lng, pre_lng],
@@ -337,14 +347,11 @@ if uploaded_file is not None:
             zoom = 2)
         
         ## evaluation results
-        errList = []
-        for i, img in enumerate(outputList) :
-            _, pre_lat, pre_lng, _, _ = gps_inference(img, model) ## 12893个分类
-            errList.append( get_distance(pre_lat ,pre_lng, y_lat, y_lng) )
         with right_column :
             st.write("blur image error distance:",err)
-            for i, editErr in enumerate(errList) :
-                st.write(f"edit image{i} error distance:",editErr)
+            if edit_check :
+                for i, editErr in enumerate(errList) :
+                    st.write(f"edit image{i} error distance:",editErr)
 
         ## loss plot
         if loss_button:
@@ -355,17 +362,22 @@ if uploaded_file is not None:
             st.scatter_chart(np.array(lossDict["pred"]))
 
         # 保存图片
-        save_list = [np.uint8(255*vis_result),
-                    np.uint8(255*heatmap),
-                    np.uint8(255*cam),
-                    np.uint8(255*sharpMask),
-                    editedImgList,
-                    condImg]
+        if edit_check :
+            save_list = [np.uint8(255*vis_result),
+                        np.uint8(255*heatmap),
+                        np.uint8(255*cam),
+                        np.uint8(255*sharpMask),
+                        cv2.cvtColor(cv2.resize(img_array, (256, 256)), cv2.COLOR_RGB2BGR),
+                        editedImgList,
+                        cv2.cvtColor(condImg, cv2.COLOR_RGB2BGR)]
+        else :
+            save_list = [np.uint8(255*vis_result),
+                        np.uint8(255*heatmap),
+                        np.uint8(255*cam),
+                        np.uint8(255*sharpMask),
+                        cv2.cvtColor(cv2.resize(img_array, (256, 256)), cv2.COLOR_RGB2BGR)]
 
-        if "img_path" not in st.session_state : 
-            dir_list = ["vis_result", "heatmap", "cam", "sharp_mask"]
-        else : 
-            dir_list = ["vis_result", "heatmap", "cam", "sharp_mask", "edit_img", "cond_img"]
+        dir_list = ["vis_result", "heatmap", "cam", "sharp_mask", "original","edit_img", "cond_img"]
 
         i = 0 
         while os.path.exists("output/vis_result/%03i.jpg" % i) :
@@ -377,6 +389,6 @@ if uploaded_file is not None:
             if dirname == "edit_img" :
                 for j, img in enumerate(con) :
                     filename = "%03i" % i + "-%i" % j + ".jpg"
-                    cv2.imwrite(os.path.join("output", dirname, filename), img)
+                    cv2.imwrite(os.path.join("output", dirname, filename), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
             else :
                 cv2.imwrite(os.path.join("output", dirname, filename), con)
