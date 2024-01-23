@@ -15,3 +15,9 @@ A tool based on interpretable AI to blur specify region of image for person priv
 - complete and test requirements.txt
 - datasets download file and choose image function
 - improve visulize results
+
+## Acknowledge
+This work is based on the following projects:
+
+- https://github.com/jacobgil/pytorch-explain-black-box
+- https://github.com/Janspiry/Palette-Image-to-Image-Diffusion-Models
