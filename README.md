@@ -1,19 +1,20 @@
 # GeoExplain-demo
 A tool based on interpretable AI to blur specify region of image for person privacy.
-![](cover.png)
+![](cover/ppt-video.mov)
+![](cover/demo1.png)
 
 ## Features
 - quick start
     ```
     pip install requirments.txt
-    streamlit --run demo.py
+    streamlit run demo.py
     ```
-- Adjust parameters: Adjust parameter like lr, mask size, iteration for optimization.
-- Visulizable result: heatmap, map location
+1. Upload image: Support for processing user photos with exif information
+2. Adjust parameters: Adjust parameter like lr, mask size, iteration for optimization.
+3. Visulizable result: heatmap, map location
 
 ## TODO
 - complete and test requirements.txt
-- datasets download file and choose image function
 - improve visulize results
 
 ## Acknowledge
