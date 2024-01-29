@@ -6,6 +6,6 @@ input/*
 eval_output*
 maskEval.py
 *.pdf
-*.png
+/evalResImg
 *.csv
 *Eval*
