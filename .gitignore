@@ -5,3 +5,7 @@ output/
 input/*
 eval_output*
 maskEval.py
+*.pdf
+*.png
+*.csv
+*Eval*

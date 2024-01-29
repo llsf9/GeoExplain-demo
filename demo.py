@@ -22,6 +22,8 @@ from core.util import tensor2img
 from paletteModel.network import Network
 import json
 
+isDatasetImage = None
+
 @st.cache_resource
 def load_model(checkpoint, hparams) :
     model = loadModel(checkpoint, hparams)
@@ -73,7 +75,7 @@ def random_choose(datasetName) :
     img_path = img_paths[random.randint(0,len(img_paths))]
 
     #debug 
-    img_path = "/home/aiwen/GeoExplain/resources/images/im2gps/Chicago_00080_496345089_f5d47dea91_196_69212252@N00.jpg"
+    # img_path = "/home/aiwen/GeoExplain/resources/images/im2gps/314328828_2b52ae145e_120_55852171@N00.jpg"
     
     return img_path
 
@@ -149,9 +151,9 @@ def train_mask(img_array, iter, lr, size, norm, y_lat, y_lng) :
         pre_class, pre_lat ,pre_lng, preds, _ = gps_inference(varImg, model) ## 12893个分类
         oriErr = get_distance(pre_lat ,pre_lng, y_lat, y_lng)
 
-        st.sidebar.write("prelat:", pre_lat.item())
-        st.sidebar.write("prelng:", pre_lng.item())
-        st.sidebar.write("error:", oriErr)
+        # st.sidebar.write("prelat:", pre_lat.item())
+        # st.sidebar.write("prelng:", pre_lng.item())
+        # st.sidebar.write("error:", oriErr)
 
         pre_class = pre_class.item()
         ground_pred = preds[0,pre_class]
@@ -209,6 +211,7 @@ def train_mask(img_array, iter, lr, size, norm, y_lat, y_lng) :
     return pre_lat.item(), pre_lng.item(), err, lossDict, vis_result, sharpMask, heatmap, cam
 
 def deletePath():
+    global isDatasetImage
     if "img_path" in st.session_state:
         del st.session_state["img_path"]
     if isDatasetImage is not None : isDatasetImage = None
@@ -222,9 +225,8 @@ hparams="base_M/hparams.yaml"
 
 # sidebar:
 # upload images
-isDatasetImage = None
-uploaded_file = st.sidebar.file_uploader("Upload a image or random choose from Im2Gps datasets", on_change = deletePath)
-random_button = st.sidebar.button('random choose')
+uploaded_file = st.sidebar.file_uploader("Upload a image or choose a random image from Im2Gps datasets", on_change = deletePath)
+random_button = st.sidebar.button('random image')
 
 datasetName = "im2gps" ## TODO
 if random_button :
@@ -242,9 +244,10 @@ if "img_path" in st.session_state:
 # hyperparameter adjusting
 # iterations, lr, size = parameter_adust()
 iterations = st.sidebar.slider('iterations', 500, 5000, 500, 1000)
+# iterations = int(st.sidebar.number_input('Input epochs')) # debug
 lr = st.sidebar.select_slider("lr", options=[0.0001, 0.001, 0.005, 0.01, 0.1], value = 0.1)
-# size = st.sidebar.select_slider("size", options=[0.001, 0.003, 0.005, 0.01, 0.05, 0.1, 0.5], value = 0.01)
-size = st.sidebar.number_input('Input size weight') # debug
+size = st.sidebar.select_slider("size", options=[0.001, 0.002, 0.003, 0.005, 0.01, 0.05, 0.1, 0.5], value = 0.01)
+# size = st.sidebar.number_input('Input size weight') # debug
 norm = st.sidebar.select_slider("norm", options=[0.05, 0.1, 0.2, 0.4, 0.6], value = 0.2)
 
 
@@ -257,8 +260,6 @@ if uploaded_file is not None:
 
     ## Original GPS info
     y_lat, y_lng = getGPS(original_image, isDatasetImage)
-    st.write("true lat:", y_lat)
-    st.write("true lng:", y_lng)
 
     img_array = np.array(image)
     # print(type(img_array))
@@ -266,21 +267,29 @@ if uploaded_file is not None:
         image, caption='original image',
         # use_column_width=True
     )
+    st.sidebar.write("true lat:", y_lat)
+    st.sidebar.write("true lng:", y_lng)
 
     loss_button = st.sidebar.checkbox('loss plot')
-    edit_check = st.sidebar.checkbox('edit check')
+    edit_check = st.sidebar.checkbox('diffusion inpainting')
     generation_button = st.sidebar.button('Mask Generation')
 
     left_column, right_column = st.columns(2)
 
     if generation_button:
 
+        pre_lat = []
+        pre_lng = []
+
         # blackbox model 
         st.sidebar.text("Loading model...")
         model = load_model(checkpoint, hparams)
         st.sidebar.text("Done!")
-        pre_lat, pre_lng, err, lossDict, vis_result, sharpMask, heatmap, cam = train_mask(img_array, parameters["iter"], parameters["lr"], parameters["size"], parameters["norm"],y_lat, y_lng)
-        
+        lat, lng, err, lossDict, vis_result, sharpMask, heatmap, cam = train_mask(img_array, parameters["iter"], parameters["lr"], parameters["size"], parameters["norm"],y_lat, y_lng)
+        pre_lat.append(lat)
+        pre_lng.append(lng)
+
+
         # palette model
         if edit_check :
 
@@ -295,7 +304,7 @@ if uploaded_file is not None:
 
             # load image
             baseImg = load_base_img(image)
-
+ 
             # inference
             editNum = 2 
             editedImgList = []
@@ -307,51 +316,66 @@ if uploaded_file is not None:
 
         # images result 
         left_column.image(
-            image = cv2.cvtColor(np.uint8(255*vis_result), cv2.COLOR_BGR2RGB),          
-            caption='masked image',
+            image = cv2.cvtColor(np.uint8(255*cam), cv2.COLOR_BGR2RGB),
+            caption='Attention Heatmap',
             use_column_width=True
         )
         right_column.image(
-            image = cv2.cvtColor(np.uint8(255*cam), cv2.COLOR_BGR2RGB),
-            caption="cam image",
+            image = cv2.cvtColor(np.uint8(255*vis_result), cv2.COLOR_BGR2RGB), 
+            caption="blurred image \n ErrorDisance = %4f km" % err,
             use_column_width=True
         )
 
         if edit_check :
+
+            errList = []
+            for i, img in enumerate(outputList) :
+                _, lat, lng, _, _ = gps_inference(img, model) ## 12893个分类
+                pre_lat.append(lat.item())
+                pre_lng.append(lng.item())
+                errList.append( get_distance(lat ,lng, y_lat, y_lng) )
+
             left_column.image(
                 image = editedImgList[0],          
-                caption='edited image 1',
+                caption="edited image 1 \n ErrorDisance = %4f km" % errList[0],
                 use_column_width=True
             )
             right_column.image(
                 image = editedImgList[1],
-                caption='edited image 2',
+                caption="edited image 2 \n ErrorDisance = %4f km" % errList[1],
                 use_column_width=True
             )
 
-            errList = []
-            for i, img in enumerate(outputList) :
-                _, pre_lat, pre_lng, _, _ = gps_inference(img, model) ## 12893个分类
-                errList.append( get_distance(pre_lat ,pre_lng, y_lat, y_lng) )
-
+        if edit_check :
+            # colorList = np.random.rand(4, 3).tolist()
+            colorList = ["#008000", "#ff0000", "#0000FF", "#7F00FF"]
+       ###########
+             
         df = pd.DataFrame({
-            "col1": [y_lat, pre_lat],
-            "col2": [y_lng, pre_lng],
-            "col3": ["#55ff00","#ff0000"],
+            "col1": [y_lat] + pre_lat,
+            "col2": [y_lng] + pre_lng,
+            "col3": colorList,
         })
 
-        left_column.map(df,
+        st.map(df,
             latitude='col1',
             longitude='col2',
             color='col3',
-            zoom = 2)
-        
+            zoom = 1)
+
+        st.markdown(':green[true GPS]')
+        st.markdown(':red[blured image GPS]')
+        st.markdown(':blue[edited image 1 GPS]')
+        st.markdown(':violet[edited image 1 GPS]')
+
+        ############
+
         ## evaluation results
-        with right_column :
-            st.write("blur image error distance:",err)
-            if edit_check :
-                for i, editErr in enumerate(errList) :
-                    st.write(f"edit image{i} error distance:",editErr)
+        # with right_column :
+        #     st.write("blur image error distance:",err)
+        #     if edit_check :
+        #         for i, editErr in enumerate(errList) :
+        #             st.write(f"edit image{i} error distance:",editErr)
 
         ## loss plot
         if loss_button:
