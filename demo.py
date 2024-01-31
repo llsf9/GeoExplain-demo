@@ -1,9 +1,3 @@
-"""
-1206: 添加自动识别GPS功能
-1211: 改变loss的计算方式
-1212: 添加编辑模式
-"""
-
 import streamlit as st
 from PIL import Image
 import time
@@ -349,6 +343,8 @@ if uploaded_file is not None:
         if edit_check :
             # colorList = np.random.rand(4, 3).tolist()
             colorList = ["#008000", "#ff0000", "#0000FF", "#7F00FF"]
+        else :
+            colorList = ["#008000", "#ff0000"]
        ###########
              
         df = pd.DataFrame({

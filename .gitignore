@@ -9,3 +9,4 @@ maskEval.py
 /evalResImg
 *.csv
 *Eval*
+venv/
